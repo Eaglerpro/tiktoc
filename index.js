@@ -1,80 +1,63 @@
+// File path: /scripts/tiktok-watcher.js
+
 const puppeteer = require('puppeteer');
 const axios = require('axios');
-const faker = require('faker');
 
-// Discord webhook URL
 const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1242966431046303825/C-JqqTlORHV83RmZ2azF18V5EkIdu0dZZanvdrjHMywo20lSC7L6y_zK0s2hk6utyi6x';
+const TIKTOK_USERNAME = 'your_generated_username';
+const TIKTOK_PASSWORD = 'your_generated_password';
+const TIKTOK_EMAIL = 'your_generated_email@example.com';
 
-// Function to send a message to Discord
-async function sendToDiscord(message) {
-    try {
-        const response = await axios.post(DISCORD_WEBHOOK_URL, {
-            content: message
-        });
-        if (response.status === 204) {
-            console.log("Message sent successfully to Discord");
-        }
-    } catch (error) {
-        console.error("Failed to send message to Discord", error);
-    }
+async function createTikTokAccount(page) {
+    await page.goto('https://www.tiktok.com/signup', { waitUntil: 'networkidle2' });
+
+    // Fill out the form
+    await page.type('input[name="email"]', TIKTOK_EMAIL);
+    await page.type('input[name="username"]', TIKTOK_USERNAME);
+    await page.type('input[name="password"]', TIKTOK_PASSWORD);
+
+    // Submit the form
+    await page.click('button[type="submit"]');
+
+    // Handle potential captchas or verification
+    // This is simplified and may require more handling
+    await page.waitForNavigation({ waitUntil: 'networkidle2' });
 }
 
-// Function to generate a random email and password
-function generateRandomCredentials() {
-    const email = `${faker.internet.userName()}@gmail.com`;
+async function watchLiveStream(page) {
+    await page.goto('https://www.tiktok.com/@generalalexmc/live', { waitUntil: 'networkidle2' });
 
-    // Generate a compliant password
-    const upper = faker.random.alpha({ count: 1, upcase: true });
-    const lower = faker.random.alpha({ count: 1, upcase: false });
-    const number = faker.random.numeric(1);
-    const symbol = faker.random.arrayElement(['!', '@', '#', '$', '%', '^', '&', '*', '(', ')']);
-    const remaining = faker.random.alphaNumeric(6);
-    const password = faker.random.arrayElement([upper, lower, number, symbol, remaining]).join('');
+    // Watch for 3 minutes
+    await page.waitForTimeout(3 * 60 * 1000);
+}
 
-    return { email, password: `${upper}${lower}${number}${symbol}${remaining}` };
+async function getRewardCode(page) {
+    // Simulate code extraction
+    const rewardCode = await page.evaluate(() => {
+        // Assuming the reward code is in a specific element
+        return document.querySelector('.reward-code').innerText;
+    });
+    return rewardCode;
+}
+
+async function sendToDiscord(rewardCode) {
+    await axios.post(DISCORD_WEBHOOK_URL, {
+        content: `Reward Code: ${rewardCode}`
+    });
 }
 
 (async () => {
-    const { email, password } = generateRandomCredentials();
-    console.log(`Generated Email: ${email}`);
-    console.log(`Generated Password: ${password}`);
-
     const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
 
-    try {
-        // Step 1: Create a TikTok account
-        await page.goto('https://www.tiktok.com/signup', { waitUntil: 'networkidle2' });
+    // Set the user agent to mobile
+    await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1');
 
-        // Simulate account creation steps (example for email signup)
-        // Note: Adjust selectors as needed based on TikTok's actual signup process
-        await page.type('input[name="email"]', email);
-        await page.type('input[name="password"]', password);
-        await page.click('button[type="submit"]');
-        await page.waitForNavigation({ waitUntil: 'networkidle2' });
+    await createTikTokAccount(page);
+    await watchLiveStream(page);
 
-        // Step 2: Navigate to the live stream
-        await page.goto('https://www.tiktok.com/@generalalexmc/live', { waitUntil: 'networkidle2' });
+    const rewardCode = await getRewardCode(page);
+    await sendToDiscord(rewardCode);
 
-        // Step 3: Watch the live stream for 3 minutes
-        await page.waitForTimeout(180000);
-
-        // Step 4: Extract the reward code (adjust selector based on actual element containing the code)
-        // For demonstration purposes, let's assume the code appears in an element with id 'reward-code'
-        try {
-            const rewardCodeElement = await page.$('#reward-code');
-            const rewardCode = await page.evaluate(el => el.textContent, rewardCodeElement);
-            console.log(`Reward Code: ${rewardCode}`);
-
-            // Step 5: Send the reward code to Discord
-            await sendToDiscord(`Reward Code: ${rewardCode}`);
-        } catch (error) {
-            console.error("Failed to retrieve the reward code:", error);
-        }
-    } catch (error) {
-        console.error("An error occurred:", error);
-    } finally {
-        // Close the browser
-        await browser.close();
-    }
+    await browser.close();
 })();
