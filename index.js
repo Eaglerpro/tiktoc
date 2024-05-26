@@ -3,47 +3,83 @@
 const puppeteer = require('puppeteer');
 const axios = require('axios');
 
-const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1242966431046303825/C-JqqTlORHV83RmZ2azF18V5EkIdu0dZZanvdrjHMywo20lSC7L6y_zK0s2hk6utyi6x';
+const DISCORD_WEBHOOK_URL = 'YOUR_DISCORD_WEBHOOK_URL';
 const TIKTOK_USERNAME = 'your_generated_username';
 const TIKTOK_PASSWORD = 'your_generated_password';
 const TIKTOK_EMAIL = 'your_generated_email@example.com';
 
 async function createTikTokAccount(page) {
-    await page.goto('https://www.tiktok.com/signup', { waitUntil: 'networkidle2' });
+    try {
+        await page.goto('https://www.tiktok.com/signup', { waitUntil: 'networkidle2' });
 
-    // Fill out the form
-    await page.type('input[name="email"]', TIKTOK_EMAIL);
-    await page.type('input[name="username"]', TIKTOK_USERNAME);
-    await page.type('input[name="password"]', TIKTOK_PASSWORD);
+        // Fill out the form
+        await page.type('input[name="email"]', TIKTOK_EMAIL);
+        await page.type('input[name="username"]', TIKTOK_USERNAME);
+        await page.type('input[name="password"]', TIKTOK_PASSWORD);
 
-    // Submit the form
-    await page.click('button[type="submit"]');
+        // Submit the form
+        await page.click('button[type="submit"]');
 
-    // Handle potential captchas or verification
-    // This is simplified and may require more handling
-    await page.waitForNavigation({ waitUntil: 'networkidle2' });
+        // Handle potential captchas or verification
+        await page.waitForNavigation({ waitUntil: 'networkidle2' });
+
+        // Check for captcha
+        if (await page.$('.captcha-container')) {
+            console.log('Captcha detected. Please solve it manually.');
+            await page.waitForSelector('.captcha-container', { visible: true });
+            await page.waitForNavigation({ waitUntil: 'networkidle2' });
+        }
+        
+        // Verify account creation success
+        if (await page.url().includes('/signup/success')) {
+            console.log('Account created successfully');
+        } else {
+            throw new Error('Account creation failed or needs manual verification');
+        }
+    } catch (error) {
+        console.error('Error creating TikTok account:', error);
+    }
 }
 
 async function watchLiveStream(page) {
-    await page.goto('https://www.tiktok.com/@generalalexmc/live', { waitUntil: 'networkidle2' });
+    try {
+        await page.goto('https://www.tiktok.com/@generalalexmc/live', { waitUntil: 'networkidle2' });
 
-    // Watch for 3 minutes
-    await page.waitForTimeout(3 * 60 * 1000);
+        // Watch for 3 minutes
+        await page.waitForTimeout(3 * 60 * 1000);
+    } catch (error) {
+        console.error('Error watching live stream:', error);
+    }
 }
 
 async function getRewardCode(page) {
-    // Simulate code extraction
-    const rewardCode = await page.evaluate(() => {
-        // Assuming the reward code is in a specific element
-        return document.querySelector('.reward-code').innerText;
-    });
-    return rewardCode;
+    try {
+        // Simulate code extraction
+        const rewardCode = await page.evaluate(() => {
+            // Assuming the reward code is in a specific element
+            const element = document.querySelector('.reward-code');
+            return element ? element.innerText : null;
+        });
+
+        if (!rewardCode) {
+            throw new Error('Reward code not found');
+        }
+
+        return rewardCode;
+    } catch (error) {
+        console.error('Error getting reward code:', error);
+        return null;
+    }
 }
 
 async function sendToDiscord(rewardCode) {
-    await axios.post(DISCORD_WEBHOOK_URL, {
-        content: `Reward Code: ${rewardCode}`
-    });
+    try {
+        await axios.post(DISCORD_WEBHOOK_URL, {
+            content: `Reward Code: ${rewardCode}`
+        });
+    } catch (error) {
+        console.error('Error sending to Discord:', error);
+    }
 }
 
 (async () => {
@@ -57,7 +93,12 @@ async function sendToDiscord(rewardCode) {
     await watchLiveStream(page);
 
     const rewardCode = await getRewardCode(page);
-    await sendToDiscord(rewardCode);
+
+    if (rewardCode) {
+        await sendToDiscord(rewardCode);
+    } else {
+        console.error('Failed to retrieve reward code');
+    }
 
     await browser.close();
 })();
